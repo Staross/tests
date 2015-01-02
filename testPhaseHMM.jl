@@ -8,7 +8,7 @@ end
 
 
 function Pt_th(th,thp)
-    
+
     P=0
     for k=-1:1
         P += normpdf(thp, 2*k*pi + th  + dt*(2*pi/24),  sqrt(dt)* 0.05)
@@ -71,7 +71,7 @@ exf = buildForward(h)
 exb = buildBackward(h)
 
 @time forward(h)
-backward(h)
+@time backward(h)
 posterior(h)
 
 s = maxPosterior(h)
