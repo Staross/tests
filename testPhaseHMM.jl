@@ -46,11 +46,11 @@ tr =  f(th,thp,A,Ap) ~ Pt_th(th,thp)Pt_A(A,Ap) ;
 em =  f(th,A,d) ~ Pem(th,A,d)
 
 h = jHMM.HMM()
-h = setStates(h,(:th,th),(:A,A))
-h = setTransitions(h, tr )
+h = set_states(h,(:th,th),(:A,A))
+h = set_transitions(h, tr )
 
-h = setObservationSpace(h,(:d,d))
-h = setEmission(h, em )
+h = set_observation_space(h,(:d,d))
+h = set_emission(h, em )
 
 Nt = 150;
 
@@ -59,22 +59,22 @@ t = linspace(0,dt*Nt,Nt)
 realPhase = 2*pi*t/24 + 0.1*cos(2*pi/15*t)
 realA = linspace(1.0,0.2,Nt)
 d1 =  realA.*waveth( realPhase ) + 0.01*randn(size(t));
-d1 = mapData(d1,d)
+d1 = map_data(d1,d)
 
-h = setObservations(h,(:d,d1))
+h = set_observations(h,(:d,d1))
 
 show(h)
 
 m = jHMM.Model( tr )
 
-exf = buildForward(h)
-exb = buildBackward(h)
+exf = build_forward(h)
+exb = build_backward(h)
 
 @time forward(h)
 @time backward(h)
 posterior(h)
 
-s = maxPosterior(h)
+s = max_posterior(h)
 th_ = s[:,1]
 
 imagesc( h.trMatrices[1]  )

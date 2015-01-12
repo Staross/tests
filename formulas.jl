@@ -2,7 +2,7 @@ using DataFrames
 
 module jHMM
 
-    export getModel
+    export get_model
 
     using DataFrames
 
@@ -50,11 +50,11 @@ module jHMM
     end
 
     function Model(f::Formula)
-        v,f = getModel(f)
+        v,f = get_model(f)
         Model(v,f)
     end
 
-    function getModel(f::Formula)
+    function get_model(f::Formula)
 
         args = f.lhs.args
         variables = Array(Symbol,length(args)-1)
@@ -69,26 +69,26 @@ module jHMM
         end
 
         #variables = unique(variables)
-        fs = parseRhs(f.rhs.args)
+        fs = parse_rhs(f.rhs.args)
 
         return variables, fs
     end
 
-    function parseRhs(args::Array{Any,1})
+    function parse_rhs(args::Array{Any,1})
 
         f = Array(Array{Any,1},0)
-        parseRhs!(args,f)
+        parse_rhs!(args,f)
         return f
     end
 
-    function parseRhs!(args::Array{Any,1},f::Array{Array{Any,1},1})
+    function parse_rhs!(args::Array{Any,1},f::Array{Array{Any,1},1})
 
-       T = getTypes(args)
+       T = get_types(args)
 
        if any( T .!= Symbol)
            idx = find( T .== Expr )
            for i = 1:length(idx)
-               parseRhs!(args[idx[i]].args,f)
+               parse_rhs!(args[idx[i]].args,f)
            end
        else
            push!(f,args)
@@ -96,7 +96,7 @@ module jHMM
 
     end
 
-    function getTypes(x::Array{Any,1})
+    function get_types(x::Array{Any,1})
 
         t = Array(DataType,length(x))
         for i=1:length(x)
@@ -114,7 +114,7 @@ import Base.show
 #From cartesian.jl: Given :i and 3, this generates :i_3
 inlineanonymous(base::Symbol, ext) = symbol(string(base)*"_"*string(ext))
 
-function packVariables(x...)
+function pack_variables(x...)
     X = Array(Array{Float64,1},length(x))
     for i=1:length(x)
        X[i] = x[i];
@@ -122,7 +122,7 @@ function packVariables(x...)
     return X
 end
 
-function packTuples(x...)
+function pack_tuples(x...)
     X = Array(Array{Float64,1},length(x))
     v = Array(Symbol,length(x))
     for i=1:length(x)
@@ -132,9 +132,9 @@ function packTuples(x...)
     return v,X
 end
 
-function setStates(h::jHMM.HMM,x...)
+function set_states(h::jHMM.HMM,x...)
 
-    v,X = packTuples(x...)
+    v,X = pack_tuples(x...)
     h.X = X
     h.ndim = length(h.X)
     h.v = v
@@ -175,12 +175,12 @@ function show(io::IO,h::jHMM.HMM)
 
 end
 
-function setTransitions(h::jHMM.HMM,f::Formula)
+function set_transitions(h::jHMM.HMM,f::Formula)
 
     h.trFormula = f
     m  = jHMM.Model(f)
 
-    M,D = getTransitionMatrix(m,h)
+    M,D = get_transition_matrix(m,h)
     h.trMatrices = M
     h.trDimensions = D
 
@@ -193,7 +193,7 @@ function setTransitions(h::jHMM.HMM,f::Formula)
     return h
 end
 
-function removePrime(s::Symbol)
+function remove_prime(s::Symbol)
 
     s = string(s)
     if s[end] == 'p'
@@ -206,35 +206,35 @@ function removePrime(s::Symbol)
     return symbol(s)
 end
 
-function removePrime(v::Array{Symbol,1})
+function remove_prime(v::Array{Symbol,1})
 
     out = Array(Symbol,0)
     for i=1:length(v)
-        push!(out, removePrime(v[i]) )
+        push!(out, remove_prime(v[i]) )
     end
     return unique(out)
 end
 
-function addPrime(s::Symbol)
+function add_prime(s::Symbol)
     return symbol( string(s) * "p")
 end
 
-function addPrime(v::Array{Symbol,1})
+function add_prime(v::Array{Symbol,1})
 
     out = Array(Symbol,0)
     for i=1:length(v)
-        push!(out, addPrime(v[i]) )
+        push!(out, add_prime(v[i]) )
     end
     return out
 end
 
-function isPrime(s::Symbol)
+function is_prime(s::Symbol)
     s = string(s)
     return s[end] == 'p'
 end
 
 #compute dependence matrix
-function getDependenceMatrices(m::jHMM.Model)
+function get_dependence_matrices(m::jHMM.Model)
 
     fs = m.f
     v =  m.v
@@ -254,13 +254,13 @@ function getDependenceMatrices(m::jHMM.Model)
     return dep,v_order
 end
 
-function getTransitionMatrix(m::jHMM.Model,h::jHMM.HMM)
+function get_transition_matrix(m::jHMM.Model,h::jHMM.HMM)
 
     fs = m.f
     v = m.v
-    dep,v_order = getDependenceMatrices(m)
+    dep,v_order = get_dependence_matrices(m)
 
-    uniquev = removePrime(v)
+    uniquev = remove_prime(v)
 
     if !isempty(symdiff(uniquev,h.v))
         error("The definition of the transitions is inconsistent with the states variables")
@@ -275,7 +275,7 @@ function getTransitionMatrix(m::jHMM.Model,h::jHMM.HMM)
         d = zeros(Int64, length(f) )
 
         for k=1:length( f )
-            s = removePrime( f[k] )
+            s = remove_prime( f[k] )
             j = find( s .== uniquev)[1]
             N[k] = length(h.X[j])
             d[k] = j
@@ -336,21 +336,21 @@ function getTransitionMatrix(m::jHMM.Model,h::jHMM.HMM)
 end
 
 
-function setObservationSpace(h::jHMM.HMM,x...)
+function set_observation_space(h::jHMM.HMM,x...)
 
-    vO,O = packTuples(x...)
+    vO,O = pack_tuples(x...)
     h.O = O
     h.ndimO = length(h.O)
     h.vO = vO;
     return h
 end
 
-function setEmission(h::jHMM.HMM,f::Formula)
+function set_emission(h::jHMM.HMM,f::Formula)
 
     h.emFormula = f
     m  = jHMM.Model(f)
 
-    M,D = getEmissionMatrix(m,h)
+    M,D = get_emissionMatrix(m,h)
 
     h.emMatrices = M
     h.emDimensions = D
@@ -364,7 +364,7 @@ function setEmission(h::jHMM.HMM,f::Formula)
     return h
 end
 
-function getEmissionMatrix(m::jHMM.Model,h::jHMM.HMM)
+function get_emissionMatrix(m::jHMM.Model,h::jHMM.HMM)
 
     fs = m.f
     v = m.v
@@ -456,16 +456,16 @@ function getEmissionMatrix(m::jHMM.Model,h::jHMM.HMM)
     return M,D
 end
 
-function setObservations(h::jHMM.HMM,x...)
+function set_observations(h::jHMM.HMM,x...)
 
     #TODO: reorder and check if dimensions match, discretize if needed
-    vd,d = packTuples(x...)
+    vd,d = pack_tuples(x...)
     h.observations = d
 
     return h
 end
 
-function getMainLoopForwardOpt(h::jHMM.HMM,fs,N)
+function get_main_loop_forward_opt(h::jHMM.HMM,fs,N)
 
     #get level of functions in the loops
     level = zeros(length(fs))
@@ -538,7 +538,7 @@ function getMainLoopForwardOpt(h::jHMM.HMM,fs,N)
     return ex
 end
 
-function getMainLoopForward(h::jHMM.HMM,fs,N)
+function get_main_loop_forward(h::jHMM.HMM,fs,N)
 
 
     #build inner part of the main loop: tmp += (alpha_t[x,y] * tr_1[x,xp]) * tr_2[x,y,yp]
@@ -580,7 +580,7 @@ function getMainLoopForward(h::jHMM.HMM,fs,N)
     return ex
 end
 
-function getAlphaInitialization(h::jHMM.HMM,name::Symbol)
+function get_alpha_initialization(h::jHMM.HMM,name::Symbol)
 
     N = [length(h.X[i]) for i=1:length(h.X)]
 
@@ -601,7 +601,7 @@ function getAlphaInitialization(h::jHMM.HMM,name::Symbol)
     return exs, alpha_t
 end
 
-function getVariableDeclaration(h::jHMM.HMM)
+function get_variable_declaration(h::jHMM.HMM)
 
     N = [length(h.X[i]) for i=1:length(h.X)]
 
@@ -629,17 +629,17 @@ function getVariableDeclaration(h::jHMM.HMM)
    return matricesDef, a_dec, scale_dec
 end
 
-function buildForward(h::jHMM.HMM)
+function build_forward(h::jHMM.HMM)
 
-    vs,fs = getModel(h.trFormula)
-    vse,fse = getModel(h.emFormula)
+    vs,fs = get_model(h.trFormula)
+    vse,fse = get_model(h.emFormula)
 
     N = [length(h.X[i]) for i=1:length(h.X)]
 
-    ex = getMainLoopForwardOpt(h,fs,N)
+    ex = get_main_loop_forward_opt(h,fs,N)
 
     #build part with emission: alpha[tp1,xp,yp] = tmp * em_1[xp,o1[tp1]]
-    ref = addPrime(h.v)
+    ref = add_prime(h.v)
     ref = [:(tp1); ref]
 
     rhs = Expr(:ref,:alpha,ref...)
@@ -654,7 +654,7 @@ function buildForward(h::jHMM.HMM)
        args = Array(Any,length(f))
        for j=1:length(f)
             x_or_O = sum( h.v .== f[j] ) >0
-            args[j] = x_or_O ? addPrime(f[j]) : Expr(:ref,f[j],:tp1)
+            args[j] = x_or_O ? add_prime(f[j]) : Expr(:ref,f[j],:tp1)
        end
 
        em = Expr(:call,:*,em, Expr(:ref,M,args...) )
@@ -668,7 +668,7 @@ function buildForward(h::jHMM.HMM)
     #loops over state variables prime
     for i=1:length(h.v)
 
-        itervar = addPrime(h.v[i])
+        itervar = add_prime(h.v[i])
         ex = quote
             for $itervar=1:$(N[i])
                $ex
@@ -676,11 +676,11 @@ function buildForward(h::jHMM.HMM)
         end
     end
 
-    exs, alpha_t = getAlphaInitialization(h,:alpha)
+    exs, alpha_t = get_alpha_initialization(h,:alpha)
     push!(exs,ex)
     ex = Expr(:block,exs...)
 
-    matricesDef, a_dec, scale_dec = getVariableDeclaration(h)
+    matricesDef, a_dec, scale_dec = get_variable_declaration(h)
 
     #finish
     ex = quote
@@ -711,10 +711,10 @@ function buildForward(h::jHMM.HMM)
 
 end
 
-function buildBackward(h::jHMM.HMM)
+function build_backward(h::jHMM.HMM)
 
-    vs,fs = getModel(h.trFormula)
-    vse,fse = getModel(h.emFormula)
+    vs,fs = get_model(h.trFormula)
+    vse,fse = get_model(h.emFormula)
 
     N = [length(h.X[i]) for i=1:length(h.X)]
 
@@ -728,7 +728,7 @@ function buildBackward(h::jHMM.HMM)
        v = fs[i][2:end]
        #transform variables
        for j=1:length(v)
-          v[j] = isPrime(v[j]) ? removePrime(v[j]) : addPrime(v[j])
+          v[j] = is_prime(v[j]) ? remove_prime(v[j]) : add_prime(v[j])
        end
 
        ex = Expr(:ref,M,v...)
@@ -775,7 +775,7 @@ function buildBackward(h::jHMM.HMM)
     end
 
     #build part : beta[t,xp,yp] = tmp
-    ref = addPrime(h.v)
+    ref = add_prime(h.v)
     ref = [:t; ref]
 
     rhs = Expr(:ref,:beta,ref...)
@@ -789,7 +789,7 @@ function buildBackward(h::jHMM.HMM)
     #loops over state variables prime
     for i=1:length(h.v)
 
-        itervar = addPrime(h.v[i])
+        itervar = add_prime(h.v[i])
         ex = quote
             for $itervar=1:$(N[i])
                $ex
@@ -814,7 +814,7 @@ function buildBackward(h::jHMM.HMM)
     push!(exs,ex)
     ex = Expr(:block,exs...)
 
-    matricesDef, a_dec, scale_dec = getVariableDeclaration(h)
+    matricesDef, a_dec, scale_dec = get_variable_declaration(h)
 
     #finish
     ex = quote
@@ -859,7 +859,7 @@ function posterior(h::jHMM.HMM)
     return p
 end
 
-function maxPosterior(h::jHMM.HMM)
+function max_posterior(h::jHMM.HMM)
 
     p = h.posterior
     Nt = size(p,1)
@@ -879,7 +879,7 @@ function maxPosterior(h::jHMM.HMM)
     return s
 end
 
-function mapData(d,x)
+function map_data(d,x)
 
     ind = zeros(size(d))
     for i=1:length(d)
@@ -910,30 +910,30 @@ tr =  f(x,xp,y,yp,z,zp) ~ f1(x,xp)f2(x,y,yp)f3(z,zp) ;
 em =  f(x,y,o1) ~ em2(x,y,o1);
 
 h = jHMM.HMM()
-h = setStates(h,(:x,x),(:y,y),(:z,z))
-h = setTransitions(h, tr )
+h = set_states(h,(:x,x),(:y,y),(:z,z))
+h = set_transitions(h, tr )
 
-h = setObservationSpace(h,(:o1,o1))
-h = setEmission(h, em )
+h = set_observation_space(h,(:o1,o1))
+h = set_emission(h, em )
 
 Nt = 2;
 
 d1 = ceil( length(o1)*rand(Nt) ); d2 = ceil( length(o2)*rand(Nt) )
 
-h = setObservations(h,(:o1,d1))
+h = set_observations(h,(:o1,d1))
 
 show(h)
 
 m = jHMM.Model( tr )
 
-exf = buildForward(h)
-exb = buildBackward(h)
+exf = build_forward(h)
+exb = build_backward(h)
 
 #@time alpha, L = forward(h)
 
 
-#v,fs = getModel( f(x,y,z) ~ f1(x)f2(y)f3(z) )
-#v,fs = getModel( f(x,y,z) ~ f1(x,y,z) )
+#v,fs = get_model( f(x,y,z) ~ f1(x)f2(y)f3(z) )
+#v,fs = get_model( f(x,y,z) ~ f1(x,y,z) )
 
 #v =  m.v
 #N = int( [length(eval(v[i])) for i=1:length(v)] )
@@ -942,7 +942,7 @@ exb = buildBackward(h)
 #F = eval( Expr(:call,:zeros,Expr(:tuple, N...)) )
 
 
-#dep,v_order = getDependenceMatrices(m)
+#dep,v_order = get_dependence_matrices(m)
 
 
 
