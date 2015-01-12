@@ -1,6 +1,4 @@
 using DataFrames
-using Cartesian
-using Cartesian.inlineanonymous
 
 module jHMM
 
@@ -112,6 +110,9 @@ end
 using jHMM
 import Base.show
 
+
+#From cartesian.jl: Given :i and 3, this generates :i_3
+inlineanonymous(base::Symbol, ext) = symbol(string(base)*"_"*string(ext))
 
 function packVariables(x...)
     X = Array(Array{Float64,1},length(x))
@@ -463,120 +464,6 @@ function setObservations(h::jHMM.HMM,x...)
 
     return h
 end
-
-function buildForward_(h::jHMM.HMM)
-
-    vs,fs = getModel(h.trFormula)
-
-    Nt = length(h.observations[1])
-    N = [length(h.X[i]) for i=1:length(h.X)]
-    alpha = eval( Expr(:call,:ones,Expr(:tuple, [Nt; N]...)) )#TODO: initial condition
-
-    ref = Array(Symbol,1+length(N)); ref[1] = :t
-    ref[2:end] = :(:)
-
-    ex = Expr(:ref,:alpha, ref... )   #alpha(t,:,:)
-    ex = :(alpha_t = squeeze($ex,1))
-
-    #determine the order in which we need to sum
-    dims = h.trDimensions
-
-    dep = zeros(Bool,length(dims),length(dims))
-    for i=1:length(dims)
-        for j=1:length(dims)
-            dep[i,j] = !isempty( intersect(dims[i],dims[j]) )
-        end
-    end
-
-    val,vect = eig(dep)
-    val = abs(val) .> 1e-10
-    vect = abs(vect) .> 1e-10
-
-    vect = vect[:,val]
-    v_summed = Array(Symbol,0)
-
-    for b=1:size(vect,2) #for each block
-
-        idx = sort( vec(sum(vect,1)),rev=true )
-
-        idx = find(vect[:,idx[b]])
-
-        f = fs[idx]
-
-        vars = Array(Symbol,0)
-        for i=1:length(idx)
-            v = h.v[ h.trDimensions[idx[i]] ]
-            for j=1:length(v)
-                push!( vars, v[j] )
-            end
-        end
-        vars = unique(vars)
-        v_summed = union(vars,v_summed)
-        missingvars = setdiff(h.v, v_summed )#variables we haven't summed over yet
-
-        #build temporary vector
-        N = zeros(Int64, length(missingvars) )
-        for i=1:length(missingvars)
-            k = find(h.v .== missingvars[i])[1]
-            N[i] = length(h.X[k])
-        end
-
-        rhs = length(N)>0 ? Expr(:call,:zeros,Expr(:tuple, N...)) : 0.0
-        lhs = inlineanonymous(:tmp,b)
-        ex = :( $lhs = $rhs)
-
-        show(ex)
-
-        #generate internal part of the loop
-        for d = 1:length(vars)
-
-        end
-
-    end
-
-end
-
-function cleanExpr(ex::Expr)
-
-    ex2 = deepcopy(ex)
-    ex2.args = cleanExpr(ex2.args)
-    return ex2
-end
-
-#this shit doesn't work
-function cleanExpr(args::Array{Any,1})
-
-    nargs = Array(Any,0)
-    for i=1:length(args)
-
-       if typeof( args[i] ) == Expr
-           if args[i].head != :line
-               if args[i].head == :block
-                   for j=1:length(args[i].args)
-
-                       if typeof(args[i].args[j])== Expr && args[i].args[j].head == :line
-                          continue
-                       end
-
-                       if typeof(args[i].args[j]) != LineNumberNode
-                           push!(nargs, cleanExpr(args[i].args[j]))
-                       end
-                   end
-               else
-
-                  if typeof(args[i]) !=  LineNumberNode
-                        push!(nargs, cleanExpr(args[i]))
-                  end
-               end
-           end
-       else
-           push!(nargs, args[i])
-       end
-    end
-    return nargs
-end
-
-
 
 function getMainLoopForwardOpt(h::jHMM.HMM,fs,N)
 
@@ -1058,99 +945,6 @@ exb = buildBackward(h)
 #dep,v_order = getDependenceMatrices(m)
 
 
-if(false)
-m = jHMM.Model( f(x,y) ~ f1(x)f2(x,y) )
-fs = m.f
-v = m.v
-dep,v_order = getDependenceMatrices(m)
-
-#compute sum
-function _getSum(fs::Array{Array{Any,1},1},dep,v)
-
-    exs = Array(Expr,length(fs))
-    sum_term = Array(Symbol,length(fs))
-    for i=1:length(fs)
-
-        d = find( dep[i,:] )
-        sum_term[i] = inlineanonymous(:s,i)
-
-        args = Array(Expr,length(d))
-        for j=1:length(d)
-            itervar = inlineanonymous(:i,v[ d[j] ])
-            args[ v_order[i,d[j]] ] = :( $(v[d[j]])[ $itervar ] ) #x[i_x]
-        end
-
-        ex = Expr(:call,fs[i][1],args...) #f1(x[i_x])
-        ex = quote
-            @inbounds $(sum_term[i]) += $ex #s_1 += f1(x[i_x])
-        end
-
-        for j=1:length(d)
-
-            itervar = inlineanonymous(:i,v[ d[j] ])
-
-            ex = quote
-                for $itervar=1:$(N[d[j]])
-                   $ex
-                end
-            end
-        end
-
-        println("")
-
-        ex = quote
-            $(sum_term[i]) = 0.0
-            $ex
-        end
-
-        exs[i] = ex
-    end
-
-    ex = Expr(:block,exs...)
-
-    finalSum = Expr(:call,:*,sum_term...)
-    ex = quote
-        $ex
-        s = $finalSum
-    end
-
-    return ex
-end
-
-
-body = _getSum(fs,dep,v)
-ex = quote
-    function getSum()
-        s = 0.0
-        $body
-        return s
-    end
-end
-
-#show(ex)
-#eval(ex)
-
-function getSumNaive(x,y,z,f1,f2)
-
-    s=0.0
-    for i=1:length(x)
-        for j=1:length(y)
-            for k=1:length(z)
-                s += f1(x[i])*f2(y[j],z[k])
-            end
-        end
-    end
-    return s
-end
-
-##
-#s = getSum()
-#s2 = getSumNaive(x,y,z,f1,f2)
-
-#@time getSum()
-#@time getSumNaive(x,y,z,f1,f2)
-
-end
 
 
 
