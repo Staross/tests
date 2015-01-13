@@ -451,7 +451,6 @@ function get_emissionMatrix(m::jHMM.Model,h::jHMM.HMM)
         #finally build the function
         #show(ex)
         eval(ex)
-
     end
 
     return emMatrices,emDimensions
@@ -486,18 +485,17 @@ function get_main_loop_forward_opt(h::jHMM.HMM,fs,N)
     depth = get_functions_depth(h.v,fs)
 
     #build inner part of the main loop: tmp_1 += (alpha_t[x,y] * tr_1[x,xp]) * tr_2[x,y,yp]
-    lhs = Expr(:ref,:alpha_t,h.v...)
+    rhs = Expr(:ref,:alpha_t,h.v...)
 
     for i=1:length(h.trMatrices)
-       if depth[i] == 1
-           M = inlineanonymous(:tr,i)
-           ex = Expr(:ref,M,fs[i][2:end]...)
-           lhs = Expr(:call,:*,lhs,ex)
+       if depth[i] == 1           
+           tr  = Expr(:ref, inlineanonymous(:tr,i), fs[i][2:end]...)
+           rhs = Expr(:call, :*, rhs, tr)
        end
     end
 
-    ex = quote
-        @inbounds tmp_1 += $lhs
+    mainloop = quote
+        @inbounds tmp_1 += $rhs
     end
 
     rhs = Expr(:tmp)
@@ -505,34 +503,30 @@ function get_main_loop_forward_opt(h::jHMM.HMM,fs,N)
     for i=1:length(h.v)
 
         lhs = inlineanonymous(:tmp,i)
-        ex2 = Expr(:block)
-        
-        if i>1
-           rhs = inlineanonymous(:tmp,i-1)
-           idx = find( depth .== i)
 
-           for j = 1:length(idx)               
-               M = inlineanonymous(:tr,idx[j])
-               ex2 = Expr(:ref,M,fs[idx[j]][2:end]...)
-               rhs = Expr(:call,:*,rhs,ex2)
-           end
+        #used only when i>1
+        rhs = inlineanonymous(:tmp,i-1)
+        idx = find( depth .== i )
+
+        for j = 1:length(idx)
+           tr  = Expr(:ref, inlineanonymous(:tr,idx[j]), fs[idx[j]][2:end]...)
+           rhs = Expr(:call,:*, rhs, tr)
         end
 
         itervar = h.v[i]
-        tmp_p1 = inlineanonymous(:tmp,i+1)
         
         if i == 1
-            ex = quote
+            mainloop = quote
                 $(lhs) = 0.0
                 @simd for $itervar=1:$(N[i])
-                   $ex
+                   $mainloop
                 end
             end
         else
-            ex = quote
+            mainloop = quote
                 $(lhs) = 0.0
                 for $itervar=1:$(N[i])
-                   $ex
+                   $mainloop
                    $(lhs) += $(rhs)
                 end
             end
@@ -540,8 +534,8 @@ function get_main_loop_forward_opt(h::jHMM.HMM,fs,N)
 
     end
 
-    #show(ex)
-    return ex
+    #show(mainloop)
+    return mainloop
 end
 
 function get_main_loop_forward(h::jHMM.HMM,fs,N)
@@ -647,14 +641,12 @@ function build_forward(h::jHMM.HMM)
     ref = add_prime(h.v)
     ref = [:(tp1); ref]
 
-    rhs = Expr(:ref,:alpha,ref...)
+    lhs = Expr(:ref,:alpha,ref...)
 
     #emission term
     em = inlineanonymous(:(tmp),length(N))
     for i=1:length(h.emMatrices)
-
-       M = inlineanonymous(:em,i)
-
+       
        f = fse[i][2:end]
        args = Array(Any,length(f))
        for j=1:length(f)
@@ -662,12 +654,13 @@ function build_forward(h::jHMM.HMM)
             args[j] = x_or_O ? add_prime(f[j]) : Expr(:ref,f[j],:tp1)
        end
 
-       em = Expr(:call,:*,em, Expr(:ref,M,args...) )
+       M = inlineanonymous(:em,i)
+       em = Expr(:call,:*, em, Expr(:ref, M, args...) )
     end
 
     ex = quote
         $ex
-        @inbounds $rhs = $em
+        @inbounds $lhs = $em
     end
 
     #loops over state variables prime
