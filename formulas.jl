@@ -466,24 +466,30 @@ function set_observations(h::jHMM.HMM,x...)
     return h
 end
 
-function get_main_loop_forward_opt(h::jHMM.HMM,fs,N)
+function get_functions_depth(variables::Array{Symbol,1},fs)
 
-    #get level of functions in the loops
-    level = zeros(length(fs))
+    depth = zeros(length(fs))
     for i=1:length(fs)
-        for j=1:length(h.v)
-            if sum( h.v[j] .== fs[i][2:end] ) > 0
-               level[i] = j
+        for j=1:length(variables)
+            if sum( variables[j] .== fs[i][2:end] ) > 0
+               depth[i] = j
                break
             end
         end
     end
+    return depth
+end
+
+function get_main_loop_forward_opt(h::jHMM.HMM,fs,N)
+
+    #get depth of functions in the loops
+    depth = get_functions_depth(h.v,fs)
 
     #build inner part of the main loop: tmp_1 += (alpha_t[x,y] * tr_1[x,xp]) * tr_2[x,y,yp]
     lhs = Expr(:ref,:alpha_t,h.v...)
 
     for i=1:length(h.trMatrices)
-       if level[i] == 1
+       if depth[i] == 1
            M = inlineanonymous(:tr,i)
            ex = Expr(:ref,M,fs[i][2:end]...)
            lhs = Expr(:call,:*,lhs,ex)
@@ -500,22 +506,21 @@ function get_main_loop_forward_opt(h::jHMM.HMM,fs,N)
 
         lhs = inlineanonymous(:tmp,i)
         ex2 = Expr(:block)
+        
         if i>1
            rhs = inlineanonymous(:tmp,i-1)
+           idx = find( depth .== i)
 
-           idx = find( level .== i)
-
-           for j = 1:length(idx)
+           for j = 1:length(idx)               
                M = inlineanonymous(:tr,idx[j])
-
                ex2 = Expr(:ref,M,fs[idx[j]][2:end]...)
                rhs = Expr(:call,:*,rhs,ex2)
-
            end
         end
 
         itervar = h.v[i]
         tmp_p1 = inlineanonymous(:tmp,i+1)
+        
         if i == 1
             ex = quote
                 $(lhs) = 0.0
@@ -540,7 +545,6 @@ function get_main_loop_forward_opt(h::jHMM.HMM,fs,N)
 end
 
 function get_main_loop_forward(h::jHMM.HMM,fs,N)
-
 
     #build inner part of the main loop: tmp += (alpha_t[x,y] * tr_1[x,xp]) * tr_2[x,y,yp]
     lhs = Expr(:ref,:alpha_t,h.v...)
