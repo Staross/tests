@@ -254,6 +254,7 @@ function get_dependence_matrices(m::jHMM.Model)
     return dep,v_order
 end
 
+#return initialized matrices, and build functions to fill them
 function get_transition_matrix(m::jHMM.Model,h::jHMM.HMM)
 
     fs = m.f
@@ -365,6 +366,7 @@ function set_emission(h::jHMM.HMM,f::Formula)
     return h
 end
 
+#return initialized matrices, and build functions to fill them
 function get_emissionMatrix(m::jHMM.Model,h::jHMM.HMM)
 
     fs = m.f
@@ -538,6 +540,73 @@ function get_main_loop_forward_opt(h::jHMM.HMM,fs,N)
     return mainloop
 end
 
+function get_main_loop_backward_opt(h::jHMM.HMM,fs,fse,N)
+
+    #get depth of functions in the loops
+    depth = get_functions_depth(h.v,fs)
+    depth_em = get_functions_depth(h.v,fs)
+
+    #build inner part of the main loop: tmp += (beta_t[x,y] * tr_1[xp,x]) * tr_2[xp,yp,y] em_1[x,o1[tp1]]
+    lhs = Expr(:ref,:beta_t,h.v...)
+
+    for i=1:length(h.trMatrices)
+
+       M = inlineanonymous(:tr,i)
+
+       v = fs[i][2:end]
+       #transform variables
+       for j=1:length(v)
+          v[j] = is_prime(v[j]) ? remove_prime(v[j]) : add_prime(v[j])
+       end
+
+       ex = Expr(:ref,M,v...)
+       lhs = Expr(:call,:*,lhs,ex)
+    end
+
+    #emission term
+    for i=1:length(h.emMatrices)
+
+       M = inlineanonymous(:em,i)
+
+       f = fse[i][2:end]
+       args = Array(Any,length(f))
+       for j=1:length(f)
+            x_or_O = sum( h.v .== f[j] ) >0
+            args[j] = x_or_O ? f[j] : Expr(:ref,f[j],:tp1)
+       end
+
+       lhs = Expr(:call,:*,lhs, Expr(:ref,M,args...) )
+    end
+
+    tmp_ex = inlineanonymous(:tmp,length(N))
+    mainloop = quote
+        @inbounds $tmp_ex += $lhs
+    end
+
+    #loops over state variables
+    for i=1:length(h.v)
+
+        itervar = h.v[i]
+        if i == 1
+            mainloop = quote
+                @simd for $itervar=1:$(N[i])
+                   $mainloop
+                end
+            end
+        else
+            mainloop = quote
+                for $itervar=1:$(N[i])
+                   $mainloop
+                end
+            end
+        end
+    end
+    
+    mainloop = Expr(:block, :($tmp_ex = 0.0), mainloop)
+    
+    return mainloop
+end    
+
 function get_main_loop_forward(h::jHMM.HMM,fs,N)
 
     #build inner part of the main loop: tmp += (alpha_t[x,y] * tr_1[x,xp]) * tr_2[x,y,yp]
@@ -550,7 +619,7 @@ function get_main_loop_forward(h::jHMM.HMM,fs,N)
     end
 
     tmp_ex = inlineanonymous(:tmp,length(N))
-    ex = quote
+    mainloop = quote
         @inbounds $tmp_ex += $lhs
     end
 
@@ -559,24 +628,24 @@ function get_main_loop_forward(h::jHMM.HMM,fs,N)
 
         itervar = h.v[i]
         if i == 1
-            ex = quote
+            mainloop = quote
                 @simd for $itervar=1:$(N[i])
-                   $ex
+                   $mainloop
                 end
             end
         else
-            ex = quote
+            mainloop = quote
                 for $itervar=1:$(N[i])
-                   $ex
+                   $mainloop
                 end
             end
         end
 
         end
 
-    ex = Expr(:block,:($tmp_ex = 0.0),ex)
+    mainloop = Expr(:block, :($tmp_ex = 0.0), mainloop)
 
-    return ex
+    return mainloop
 end
 
 function get_alpha_initialization(h::jHMM.HMM,name::Symbol)
@@ -637,7 +706,7 @@ function build_forward(h::jHMM.HMM)
 
     ex = get_main_loop_forward_opt(h,fs,N)
 
-    #build part with emission: alpha[tp1,xp,yp] = tmp * em_1[xp,o1[tp1]]
+    #build part with emission: alpha[tp1,xp,yp] = tmp_2 * em_1[xp,o1[tp1]]
     ref = add_prime(h.v)
     ref = [:(tp1); ref]
 
@@ -709,12 +778,7 @@ function build_forward(h::jHMM.HMM)
 
 end
 
-function build_backward(h::jHMM.HMM)
-
-    vs,fs = get_model(h.trFormula)
-    vse,fse = get_model(h.emFormula)
-
-    N = [length(h.X[i]) for i=1:length(h.X)]
+function get_main_loop_backward(h::jHMM.HMM,fs,fse,N)
 
     #build inner part of the main loop: tmp += (beta_t[x,y] * tr_1[xp,x]) * tr_2[xp,yp,y] em_1[x,o1[tp1]]
     lhs = Expr(:ref,:beta_t,h.v...)
@@ -748,9 +812,9 @@ function build_backward(h::jHMM.HMM)
        lhs = Expr(:call,:*,lhs, Expr(:ref,M,args...) )
     end
 
-
-    ex = quote
-        @inbounds tmp += $lhs
+    tmp_ex = inlineanonymous(:tmp,length(N))
+    mainloop = quote
+        @inbounds $tmp_ex += $lhs
     end
 
     #loops over state variables
@@ -758,30 +822,44 @@ function build_backward(h::jHMM.HMM)
 
         itervar = h.v[i]
         if i == 1
-            ex = quote
+            mainloop = quote
                 @simd for $itervar=1:$(N[i])
-                   $ex
+                   $mainloop
                 end
             end
         else
-            ex = quote
+            mainloop = quote
                 for $itervar=1:$(N[i])
-                   $ex
+                   $mainloop
                 end
             end
         end
     end
+    
+    mainloop = Expr(:block, :($tmp_ex = 0.0), mainloop)
+    
+    return mainloop
+end
+
+function build_backward(h::jHMM.HMM)
+
+    vs,fs = get_model(h.trFormula)
+    vse,fse = get_model(h.emFormula)
+
+    N = [length(h.X[i]) for i=1:length(h.X)]
+
+    ex = get_main_loop_backward(h,fs,fse,N)
 
     #build part : beta[t,xp,yp] = tmp
     ref = add_prime(h.v)
     ref = [:t; ref]
 
     rhs = Expr(:ref,:beta,ref...)
-
+    
+    tmp_ex = inlineanonymous(:tmp,length(N))
     ex = quote
-        tmp = 0.0
         $ex
-        @inbounds $rhs = tmp
+        @inbounds $rhs = $tmp_ex
     end
 
     #loops over state variables prime
