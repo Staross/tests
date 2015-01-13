@@ -178,14 +178,14 @@ end
 function set_transitions(h::jHMM.HMM,f::Formula)
 
     h.trFormula = f
-    m  = jHMM.Model(f)
+    trModel  = jHMM.Model(f)
 
-    M,D = get_transition_matrix(m,h)
-    h.trMatrices = M
-    h.trDimensions = D
+    trMatrices, trDimensions = get_transition_matrix(trModel,h)
+    h.trMatrices = trMatrices
+    h.trDimensions = trDimensions
 
     #call the function
-    for i=1:length(m.f)
+    for i=1:length(trModel.f)
         fname = symbol( string("fill_transition_matrix_",i) )
         eval(Expr(:call, fname,:h))
     end
@@ -266,8 +266,9 @@ function get_transition_matrix(m::jHMM.Model,h::jHMM.HMM)
         error("The definition of the transitions is inconsistent with the states variables")
     end
 
-    M = Array(Any,length(fs))
-    D = Array(Any,length(fs)) #dimensions of the transition matrices, trDimensions
+    trMatrices = Array(Any,length(fs))
+    trDimensions = Array(Any,length(fs)) #dimensions of the transition matrices
+    
     for i=1:length(fs)
 
         f = fs[i][2:end]
@@ -281,8 +282,8 @@ function get_transition_matrix(m::jHMM.Model,h::jHMM.HMM)
             d[k] = j
         end
 
-        M[i] = eval( Expr(:call,:zeros,Expr(:tuple, N...)) )
-        D[i] = d
+        trMatrices[i] = eval( Expr(:call,:zeros,Expr(:tuple, N...)) )
+        trDimensions[i] = d
     end
 
     #now build the functions
@@ -292,7 +293,7 @@ function get_transition_matrix(m::jHMM.Model,h::jHMM.HMM)
         args = Array(Expr,length(d))
         idx = Array(Symbol,length(d))
         for j=1:length(d)
-            s = :(X[$(D[i][j])])
+            s = :(X[$(trDimensions[i][j])])
             itervar = inlineanonymous(:i, v[d[j]]  )
             args[ v_order[i,d[j]] ] = :( $s[ $itervar ] ) #x[i_x]
 
@@ -300,7 +301,7 @@ function get_transition_matrix(m::jHMM.Model,h::jHMM.HMM)
         end
 
         rhs = Expr(:call,fs[i][1],args...) #f1(X[1][i_x])
-        lhs = Expr(:ref,:(M[$i]),idx...)   #M[1][i_x,i_xp]
+        lhs = Expr(:ref,:(trMatrices[$i]),idx...)   #M[1][i_x,i_xp]
 
         ex = quote
             $lhs = $rhs
@@ -312,7 +313,7 @@ function get_transition_matrix(m::jHMM.Model,h::jHMM.HMM)
             itervar = inlineanonymous(:i, s[j]  )
 
             ex = quote
-                for $itervar=1:length(X[$(D[i][j])])
+                for $itervar=1:length(X[$(trDimensions[i][j])])
                    $ex
                 end
             end
@@ -320,19 +321,19 @@ function get_transition_matrix(m::jHMM.Model,h::jHMM.HMM)
 
         fname = symbol( string("fill_transition_matrix_",i) )
         ex = quote
-        function $fname(h::jHMM.HMM)
-            M = h.trMatrices
-            X = h.X
-            $ex
-            h.trMatrices = M
-        end
+            function $fname(h::jHMM.HMM)
+                trMatrices = h.trMatrices
+                X = h.X
+                $ex
+                h.trMatrices = trMatrices
+            end
         end
         #build the function
         eval(ex)
 
     end
 
-    return M,D
+    return trMatrices,trDimensions
 end
 
 
@@ -348,15 +349,15 @@ end
 function set_emission(h::jHMM.HMM,f::Formula)
 
     h.emFormula = f
-    m  = jHMM.Model(f)
+    emModel  = jHMM.Model(f)
 
-    M,D = get_emissionMatrix(m,h)
+    emMatrices,emDimensions = get_emissionMatrix(emModel,h)
 
-    h.emMatrices = M
-    h.emDimensions = D
+    h.emMatrices = emMatrices
+    h.emDimensions = emDimensions
 
     #call the functions
-    for i=1:length(m.f)
+    for i=1:length(emModel.f)
         fname = symbol( string("fill_emission_matrix_",i) )
         eval(Expr(:call, fname,:h))
     end
@@ -369,8 +370,8 @@ function get_emissionMatrix(m::jHMM.Model,h::jHMM.HMM)
     fs = m.f
     v = m.v
 
-    M = Array(Any,length(fs))
-    D = Array(Any,length(fs)) #dimensions of the emission matrices
+    emMatrices = Array(Any,length(fs))
+    emDimensions = Array(Any,length(fs)) #dimensions of the emission matrices
     X_OR_O = Array(Any,length(fs)) #state or observation space
     for i=1:length(fs)
 
@@ -395,8 +396,8 @@ function get_emissionMatrix(m::jHMM.Model,h::jHMM.HMM)
             d[k] = j
         end
 
-        M[i] = eval( Expr(:call,:zeros,Expr(:tuple, N...)) )
-        D[i] = d
+        emMatrices[i] = eval( Expr(:call,:zeros,Expr(:tuple, N...)) )
+        emDimensions[i] = d
         X_OR_O[i] = x_or_O
     end
 
@@ -409,7 +410,7 @@ function get_emissionMatrix(m::jHMM.Model,h::jHMM.HMM)
         idx = Array(Symbol,length(f))
         for j=1:length(f)
 
-            k = D[i][j]
+            k = emDimensions[i][j]
             s = X_OR_O[i][j]  ? :(X[$(k)]) : :(O[$(k)])
             itervar = inlineanonymous(:i, f[j]  )
             args[ j ] = :( $s[ $itervar ] ) #x[i_x]
@@ -417,7 +418,7 @@ function get_emissionMatrix(m::jHMM.Model,h::jHMM.HMM)
         end
 
         rhs = Expr(:call,fs[i][1],args...) #f1(X[1][i_x])
-        lhs = Expr(:ref,:(M[$i]),idx...)   #M[1][i_x,i_xp]
+        lhs = Expr(:ref,:(emMatrices[$i]),idx...)   #emMatrices[1][i_x,i_xp]
 
         ex = quote
             $lhs = $rhs
@@ -425,7 +426,7 @@ function get_emissionMatrix(m::jHMM.Model,h::jHMM.HMM)
 
         for j=1:length(f)
 
-            k = D[i][j]
+            k = emDimensions[i][j]
             r = X_OR_O[i][j] ? :(X[$(k)]) : :(O[$(k)])
 
             itervar = inlineanonymous(:i, f[j]  )
@@ -439,13 +440,13 @@ function get_emissionMatrix(m::jHMM.Model,h::jHMM.HMM)
 
         fname = symbol( string("fill_emission_matrix_",i) )
         ex = quote
-        function $fname(h::jHMM.HMM)
-            M = h.emMatrices
-            X = h.X
-            O = h.O
-            $ex
-            h.emMatrices = M
-        end
+            function $fname(h::jHMM.HMM)
+                emMatrices = h.emMatrices
+                X = h.X
+                O = h.O
+                $ex
+                h.emMatrices = emMatrices
+            end
         end
         #finally build the function
         #show(ex)
@@ -453,7 +454,7 @@ function get_emissionMatrix(m::jHMM.Model,h::jHMM.HMM)
 
     end
 
-    return M,D
+    return emMatrices,emDimensions
 end
 
 function set_observations(h::jHMM.HMM,x...)
