@@ -529,7 +529,7 @@ function get_main_loop_forward_opt(h::jHMM.HMM,fs,N)
                 $(lhs) = 0.0
                 for $itervar=1:$(N[i])
                    $mainloop
-                   $(lhs) += $(rhs)
+                   @inbounds $(lhs) += $(rhs)
                 end
             end
         end
@@ -544,66 +544,87 @@ function get_main_loop_backward_opt(h::jHMM.HMM,fs,fse,N)
 
     #get depth of functions in the loops
     depth = get_functions_depth(h.v,fs)
-    depth_em = get_functions_depth(h.v,fs)
+    depth_em = get_functions_depth(h.v,fse)
 
-    #build inner part of the main loop: tmp += (beta_t[x,y] * tr_1[xp,x]) * tr_2[xp,yp,y] em_1[x,o1[tp1]]
-    lhs = Expr(:ref,:beta_t,h.v...)
+    #build inner part of the main loop: tmp_1 += (beta_t[x,y] * tr_1[xp,x]) * tr_2[xp,yp,y] em_1[x,o1[tp1]]
+    rhs = Expr(:ref,:beta_t,h.v...)
 
     for i=1:length(h.trMatrices)
+       if depth[i] == 1
 
-       M = inlineanonymous(:tr,i)
+           v = fs[i][2:end]
+           #transform variables
+           for j=1:length(v)
+              v[j] = is_prime(v[j]) ? remove_prime(v[j]) : add_prime(v[j])
+           end
 
-       v = fs[i][2:end]
-       #transform variables
-       for j=1:length(v)
-          v[j] = is_prime(v[j]) ? remove_prime(v[j]) : add_prime(v[j])
+           ex = Expr(:ref, inlineanonymous(:tr,i) ,v...)
+           rhs = Expr(:call,:*,rhs,ex)
        end
-
-       ex = Expr(:ref,M,v...)
-       lhs = Expr(:call,:*,lhs,ex)
     end
 
     #emission term
     for i=1:length(h.emMatrices)
+       if depth_em[i] == 1 
+       
+           f = fse[i][2:end]
+           args = Array(Any,length(f))
+           for j=1:length(f)
+                x_or_O = sum( h.v .== f[j] ) >0
+                args[j] = x_or_O ? f[j] : Expr(:ref,f[j],:tp1)
+           end
 
-       M = inlineanonymous(:em,i)
-
-       f = fse[i][2:end]
-       args = Array(Any,length(f))
-       for j=1:length(f)
-            x_or_O = sum( h.v .== f[j] ) >0
-            args[j] = x_or_O ? f[j] : Expr(:ref,f[j],:tp1)
+           rhs = Expr(:call,:*,rhs, Expr(:ref, inlineanonymous(:em,i), args...) )
        end
-
-       lhs = Expr(:call,:*,lhs, Expr(:ref,M,args...) )
     end
 
-    tmp_ex = inlineanonymous(:tmp,length(N))
     mainloop = quote
-        @inbounds $tmp_ex += $lhs
+        @inbounds tmp_1 += $rhs
     end
 
     #loops over state variables
     for i=1:length(h.v)
 
+        lhs = inlineanonymous(:tmp,i)
+
+        #used only when i>1
+        rhs = inlineanonymous(:tmp,i-1)
+        
+        idx = find( depth .== i )
+        for j = 1:length(idx)
+           tr  = Expr(:ref, inlineanonymous(:tr,idx[j]), fs[idx[j]][2:end]...)
+           rhs = Expr(:call,:*, rhs, tr)
+        end
+        
+        idx = find( depth_em .== i )
+        for j = 1:length(idx)
+           em  = Expr(:ref, inlineanonymous(:em,idx[j]), fse[idx[j]][2:end]...)
+           rhs = Expr(:call,:*, rhs, em)
+        end
+
         itervar = h.v[i]
+        
         if i == 1
             mainloop = quote
+                $(lhs) = 0.0
                 @simd for $itervar=1:$(N[i])
                    $mainloop
                 end
             end
         else
             mainloop = quote
+                $(lhs) = 0.0
                 for $itervar=1:$(N[i])
                    $mainloop
+                   @inbounds $(lhs) += $(rhs)
                 end
             end
         end
+
     end
-    
-    mainloop = Expr(:block, :($tmp_ex = 0.0), mainloop)
-    
+
+    #show(mainloop)
+        
     return mainloop
 end    
 
@@ -848,7 +869,7 @@ function build_backward(h::jHMM.HMM)
 
     N = [length(h.X[i]) for i=1:length(h.X)]
 
-    ex = get_main_loop_backward(h,fs,fse,N)
+    ex = get_main_loop_backward_opt(h,fs,fse,N)
 
     #build part : beta[t,xp,yp] = tmp
     ref = add_prime(h.v)
