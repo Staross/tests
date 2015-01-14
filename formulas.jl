@@ -115,15 +115,15 @@ import Base.show
 inlineanonymous(base::Symbol, ext) = symbol(string(base)*"_"*string(ext))
 
 function pack_variables(x...)
-    X = Array(Array{Float64,1},length(x))
+    X = Array(Array{Any,1},length(x))
     for i=1:length(x)
        X[i] = x[i];
     end
     return X
 end
 
-function pack_tuples(x...)
-    X = Array(Array{Float64,1},length(x))
+function pack_tuples(t::Type,x...)
+    X = Array(Array{t,1},length(x))
     v = Array(Symbol,length(x))
     for i=1:length(x)
        v[i] = x[i][1];
@@ -134,7 +134,7 @@ end
 
 function set_states(h::jHMM.HMM,x...)
 
-    v,X = pack_tuples(x...)
+    v,X = pack_tuples(Any,x...)
     h.X = X
     h.ndim = length(h.X)
     h.v = v
@@ -340,7 +340,7 @@ end
 
 function set_observation_space(h::jHMM.HMM,x...)
 
-    vO,O = pack_tuples(x...)
+    vO,O = pack_tuples(Any,x...)
     h.O = O
     h.ndimO = length(h.O)
     h.vO = vO;
@@ -461,7 +461,8 @@ end
 function set_observations(h::jHMM.HMM,x...)
 
     #TODO: reorder and check if dimensions match, discretize if needed
-    vd,d = pack_tuples(x...)
+    vd, d = pack_tuples(Float64,x...)
+
     h.observations = d
 
     return h
@@ -710,7 +711,7 @@ function get_variable_declaration(h::jHMM.HMM)
     end
     #unpack observations
     for i=1:length(h.vO)
-       push!(exs, :($(h.vO[i]) = h.observations[$i]::Array{Float64,$(ndims(h.observations[i]))} ) )
+       push!(exs, :($(h.vO[i]) = h.observations[$i]::Array{Float64,$(ndims(h.observations[i]))} ) ) #this could be Int64, but it doesn't seem to interact well with @simd
     end
 
     matricesDef = Expr(:block,exs...)
@@ -1017,7 +1018,7 @@ Nt = 2;
 
 d1 = ceil( length(o1)*rand(Nt) ); d2 = ceil( length(o2)*rand(Nt) )
 
-h = set_observations(h,(:o1,d1))
+h = set_observations(h,(:o1,int(d1)))
 
 show(h)
 
