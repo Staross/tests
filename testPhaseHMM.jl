@@ -46,7 +46,7 @@ h = set_transitions(h, tr )
 h = set_observation_space(h,(:d,d))
 h = set_emission(h, em )
 
-Nt = 150;
+Nt = 15;
 
 t = linspace(0,dt*Nt,Nt)
 
@@ -78,16 +78,16 @@ R = abs( mean( exp(im*(th_-realPhase))))
 println(R)
 
 ## coing toss example
-if true
+if false
     
-p = 1/20;
+p = 1/30;
 trMatrix = [1-p p; p 1-p];
 
 function P_tr(state,statep)
     return trMatrix[state,statep]
 end
 
-bias = 0.4;
+bias = 0.25;
 emMatrix = [0.5 0.5; 0.5-bias 0.5+bias];
 
 function P_em(state, coin)
@@ -95,18 +95,18 @@ function P_em(state, coin)
 end
 
 states = [1.0; 2.0]; #fair, unfair
-coin = [1.0; 2.0]; #head, tail
+coins = [1.0; 2.0]; #head, tail
 
 h = jHMM.HMM()
 h = set_states(h,(:state,states))
 h = set_transitions(h, f(state,statep) ~ P_tr(state,statep)  )
 
-h = set_observation_space(h,(:coin,coin))
+h = set_observation_space(h,(:coin,coins))
 h = set_emission(h, f(state,coin) ~ P_em(state,coin) )
 
-data = (rand(20) .< 0.5 ) + 1.0;
-data = [data; (rand(20) .< 0.5+bias ) + 1.0];
-data = [data; (rand(20) .< 0.5 ) + 1.0];
+data = (rand(30) .< 0.5 ) + 1.0;
+data = [data; (rand(30) .< 0.5+bias ) + 1.0];
+data = [data; (rand(30) .< 0.5 ) + 1.0];
 
 h = set_observations(h,(:coin,data))
 

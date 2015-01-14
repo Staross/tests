@@ -863,6 +863,70 @@ function get_main_loop_backward(h::jHMM.HMM,fs,fse,N)
     return mainloop
 end
 
+function build_joint_of_hidden_states(h::jHMM.HMM,t::Integer)
+
+    vs,fs = get_model(h.trFormula)
+    vse,fse = get_model(h.emFormula)
+
+    N = [length(h.X[i]) for i=1:length(h.X)]
+        
+    #build inner part of the main loop: xi[x,y,xp,y] += (alpha[x,y] * tr_1[x,xp]) * tr_2[x,y,yp] em_1[xp,o1[tp1]] beta[xp,yp] 
+    rhs = Expr(:ref,:alpha_t,h.v...)
+        
+    for i=1:length(h.trMatrices)
+           M = inlineanonymous(:tr,i)
+           ex = Expr(:ref,M,fs[i][2:end]...)
+           rhs = Expr(:call,:*,rhs,ex)
+    end
+
+
+    #emission term
+    for i=1:length(h.emMatrices)
+
+       M = inlineanonymous(:em,i)
+
+       f = fse[i][2:end]
+       args = Array(Any,length(f))
+       for j=1:length(f)
+            x_or_O = sum( h.v .== f[j] ) >0
+            args[j] = x_or_O ? add_prime(f[j]) : Expr(:ref,f[j],:tp1)
+       end
+
+       rhs = Expr(:call,:*,rhs, Expr(:ref,M,args...) )
+    end
+
+    rhs = Expr(:call,:*,rhs, Expr(:ref,:beta_t, add_prime(h.v)...) )
+
+    lhs = Expr(:ref,:xi,[h.v; add_prime(h.v)]...)
+
+    mainloop = quote
+        @inbounds $lhs += $rhs
+    end
+
+    #loops over state variables
+    for i=1:length(h.v)
+
+        itervar = h.v[i]
+        if i == 1
+            mainloop = quote
+                @simd for $itervar=1:$(N[i])
+                   $mainloop
+                end
+            end
+        else
+            mainloop = quote
+                for $itervar=1:$(N[i])
+                   $mainloop
+                end
+            end
+        end
+    end
+    
+    
+    return mainloop
+
+end
+
 function build_backward(h::jHMM.HMM)
 
     vs,fs = get_model(h.trFormula)
