@@ -754,16 +754,7 @@ function build_forward(h::jHMM.HMM)
         @inbounds $lhs = $em
     end
 
-    #loops over state variables prime
-    for i=1:length(h.v)
-
-        itervar = add_prime(h.v[i])
-        ex = quote
-            for $itervar=1:$(N[i])
-               $ex
-            end
-        end
-    end
+    ex = loop_over_prime(h.v,N,ex)
 
     exs, alpha_t = get_alpha_initialization(h,:alpha)
     push!(exs,ex)
@@ -862,6 +853,21 @@ function get_main_loop_backward(h::jHMM.HMM,fs,fse,N)
     
     return mainloop
 end
+    
+function loop_over_prime(v,N,ex::Expr)
+
+    #loops over state variables prime
+    for i=1:length(v)
+
+        itervar = add_prime(h.v[i])
+        ex = quote
+            for $itervar=1:$(N[i])
+               $ex
+            end
+        end
+    end
+    return ex
+end
 
 function build_joint_of_hidden_states(h::jHMM.HMM)
 
@@ -920,17 +926,8 @@ function build_joint_of_hidden_states(h::jHMM.HMM)
         end
     end
         
-    #loops over state variables prime
-    for i=1:length(h.v)
-
-        itervar = add_prime(h.v[i])
-        mainloop = quote
-            for $itervar=1:$(N[i])
-               $mainloop
-            end
-        end
-    end
-            
+    mainloop = loop_over_prime(h.v,N,mainloop)
+                
     xi_dec = Expr(:call,:zeros,Expr(:tuple, [N N]...))
         
     matricesDef, a_dec, scale_dec = get_variable_declaration(h)
@@ -990,16 +987,7 @@ function build_backward(h::jHMM.HMM)
         @inbounds $rhs = $tmp_ex
     end
 
-    #loops over state variables prime
-    for i=1:length(h.v)
-
-        itervar = add_prime(h.v[i])
-        ex = quote
-            for $itervar=1:$(N[i])
-               $ex
-            end
-        end
-    end
+    ex = loop_over_prime(h.v,N,ex)
 
     ref = Array(Symbol,1+length(N)); ref[1] = :(tp1)
     ref[2:end] = :(:)
