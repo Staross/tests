@@ -63,9 +63,12 @@ m = jHMM.Model( tr )
 
 exf = build_forward(h)
 exb = build_backward(h)
+exjoint = build_joint_of_hidden_states(h)
 
 @time forward(h)
 @time backward(h)
+@time joint_of_hidden_states(h,5)
+
 posterior(h)
 
 s = max_posterior(h)
@@ -112,9 +115,11 @@ h = set_observations(h,(:coin,data))
 
 exf = build_forward(h)
 exb = build_backward(h)
+exjoint = build_joint_of_hidden_states(h)
 
 @time forward(h)
 @time backward(h)
+@time joint_of_hidden_states(h,5)
 posterior(h)
 
 s = max_posterior(h)

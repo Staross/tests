@@ -863,22 +863,20 @@ function get_main_loop_backward(h::jHMM.HMM,fs,fse,N)
     return mainloop
 end
 
-function build_joint_of_hidden_states(h::jHMM.HMM,t::Integer)
+function build_joint_of_hidden_states(h::jHMM.HMM)
 
     vs,fs = get_model(h.trFormula)
     vse,fse = get_model(h.emFormula)
 
     N = [length(h.X[i]) for i=1:length(h.X)]
         
-    #build inner part of the main loop: xi[x,y,xp,y] += (alpha[x,y] * tr_1[x,xp]) * tr_2[x,y,yp] em_1[xp,o1[tp1]] beta[xp,yp] 
+    #build inner part of the main loop: xi[x,y,xp,y] = (alpha[x,y] * tr_1[x,xp]) * tr_2[x,y,yp] em_1[xp,o1[tp1]] beta[xp,yp] 
     rhs = Expr(:ref,:alpha_t,h.v...)
         
     for i=1:length(h.trMatrices)
-           M = inlineanonymous(:tr,i)
-           ex = Expr(:ref,M,fs[i][2:end]...)
-           rhs = Expr(:call,:*,rhs,ex)
+       ex = Expr(:ref, inlineanonymous(:tr,i), fs[i][2:end]...)
+       rhs = Expr(:call,:*,rhs,ex)
     end
-
 
     #emission term
     for i=1:length(h.emMatrices)
@@ -889,7 +887,7 @@ function build_joint_of_hidden_states(h::jHMM.HMM,t::Integer)
        args = Array(Any,length(f))
        for j=1:length(f)
             x_or_O = sum( h.v .== f[j] ) >0
-            args[j] = x_or_O ? add_prime(f[j]) : Expr(:ref,f[j],:tp1)
+            args[j] = x_or_O ? add_prime(f[j]) : Expr(:ref,f[j],:(tp1))
        end
 
        rhs = Expr(:call,:*,rhs, Expr(:ref,M,args...) )
@@ -900,7 +898,7 @@ function build_joint_of_hidden_states(h::jHMM.HMM,t::Integer)
     lhs = Expr(:ref,:xi,[h.v; add_prime(h.v)]...)
 
     mainloop = quote
-        @inbounds $lhs += $rhs
+        @inbounds $lhs = $rhs
     end
 
     #loops over state variables
@@ -921,9 +919,53 @@ function build_joint_of_hidden_states(h::jHMM.HMM,t::Integer)
             end
         end
     end
-    
-    
-    return mainloop
+        
+    #loops over state variables prime
+    for i=1:length(h.v)
+
+        itervar = add_prime(h.v[i])
+        mainloop = quote
+            for $itervar=1:$(N[i])
+               $mainloop
+            end
+        end
+    end
+            
+    xi_dec = Expr(:call,:zeros,Expr(:tuple, [N N]...))
+        
+    matricesDef, a_dec, scale_dec = get_variable_declaration(h)
+        
+    ref = Array(Symbol,1+length(N)); ref[1] = :(t); ref[2:end] = :(:)        
+    alpha_t = Expr(:ref,:(h.forward), ref... )   #beta(t,:,:)
+        
+    ref[1] = :(tp1);
+    beta_t = Expr(:ref,:(h.backward), ref... )   #beta(t,:,:)    
+        
+
+    #finish
+    ex = quote
+        function joint_of_hidden_states(h::jHMM.HMM,t::Integer)
+            
+            if t > size(h.forward,1)-1 
+               error("Can't compute the joint probability for t > size(h.forward,1)-1")
+            end
+            
+            tp1 = t+1
+        
+            xi = $xi_dec
+            alpha_t = squeeze($alpha_t,1)::Array{Float64,$(length(h.v))}
+            beta_t = squeeze($beta_t,1)::Array{Float64,$(length(h.v))}
+            
+            $matricesDef
+            
+            $mainloop
+                        
+            return xi
+        end
+    end
+        
+    eval(ex)
+    return ex
 
 end
 
@@ -1090,6 +1132,7 @@ m = jHMM.Model( tr )
 
 exf = build_forward(h)
 exb = build_backward(h)
+exjoint = build_joint_of_hidden_states(h)
 
 #@time alpha, L = forward(h)
 
