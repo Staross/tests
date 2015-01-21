@@ -1,5 +1,16 @@
 using DataFrames
 
+if VERSION < v"0.4-"
+    using Docile
+    using Lexicon
+    macro doc_mstr(text)
+        Base.triplequoted(text)
+    end
+    macro doc_str(text)
+        text
+    end
+end
+
 module jHMM
 
     export get_model
@@ -8,7 +19,7 @@ module jHMM
 
     type HMM
         v::Array{Symbol,1} #symbols of states variables
-        X::Array{Array{Float64,1},1} #discrete values of states variables
+        X::Array{Array{Any,1},1} #discrete values of states variables
         ndim::Integer #dimension of state space
         trFormula::Formula
         trMatrices::Array{Any,1}
@@ -109,7 +120,7 @@ end
 
 using jHMM
 import Base.show
-
+import Base.zero
 
 #From cartesian.jl: Given :i and 3, this generates :i_3
 inlineanonymous(base::Symbol, ext) = symbol(string(base)*"_"*string(ext))
@@ -132,6 +143,14 @@ function pack_tuples(t::Type,x...)
     return v,X
 end
 
+
+@doc doc"""Set the `hidden state variables` of the HMM.
+States are provided as a tuple of Symbol and Vector.
+The symbols are used to denote the states variables in emmission and transition formulas.
+The associated vectors contains the discrete values that the state can take. 
+
+> h = set_states(h,(:x,x),(:y,y),(:z,z))
+""" ->
 function set_states(h::jHMM.HMM,x...)
 
     v,X = pack_tuples(Any,x...)
@@ -1037,6 +1056,33 @@ function build_backward(h::jHMM.HMM)
 
 end
 
+function build_baum_welch_emission(h::jHMM.HMM)
+
+
+    vse,fse = get_model(h.emFormula)
+    
+    for i=1:length(h.emMatrices)
+        
+           f = fse[i][2:end]
+           args = Array(Any,length(f))
+           for j=1:length(f)
+                x_or_O = sum( h.v .== f[j] ) >0
+                args[j] = x_or_O ? f[j] : Expr(:ref,f[j],:tp1)
+           end
+
+        
+        
+    end
+
+
+end
+
+
+function build_baum_welch_transitions(h::jHMM.HMM)
+
+    
+
+end
 
 function posterior(h::jHMM.HMM)
 
@@ -1055,7 +1101,13 @@ function max_posterior(h::jHMM.HMM)
 
     p = h.posterior
     Nt = size(p,1)
-    s = zeros(Nt,length(h.X))
+    s = Array(Any,0);
+    
+    for i=1:h.ndim
+        push!(s, fill(h.X[i][1], Nt) )
+    end
+        
+    #s = zeros(Nt,length(h.X))
 
     for t=1:Nt
 
@@ -1063,7 +1115,7 @@ function max_posterior(h::jHMM.HMM)
         idx = ind2sub(size(p)[2:end], indmax(tmp))
 
         for i=1:length(idx)
-           s[t,i] = h.X[i][idx[i]]
+           s[i][t] = h.X[i][idx[i]]
         end
 
     end
@@ -1080,6 +1132,20 @@ function map_data(d,x)
     return ind
 
 end
+
+function state2ind{T}(state::T,states::Array{T,1})
+    
+    for i=1:length(states)
+        if states[i] == state
+            return i
+        end
+    end
+
+    error("state was not found.")
+end
+
+
+
 
 x = linspace(-2,2,60);
 y = linspace(-2,2,40);

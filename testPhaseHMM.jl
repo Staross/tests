@@ -72,7 +72,7 @@ exjoint = build_joint_of_hidden_states(h)
 posterior(h)
 
 s = max_posterior(h)
-th_ = s[:,1]
+th_ = s[1]
 
 imagesc( h.trMatrices[1]  )
 
@@ -81,24 +81,24 @@ R = abs( mean( exp(im*(th_-realPhase))))
 println(R)
 
 ## coing toss example
-if false
+if true
     
+states = ["fair"; "unfair"]; #fair, unfair
+coins = [1.0; 2.0]; #head, tail
+
 p = 1/30;
 trMatrix = [1-p p; p 1-p];
 
 function P_tr(state,statep)
-    return trMatrix[state,statep]
+    return trMatrix[state2ind(state,states),state2ind(statep,states)]
 end
 
 bias = 0.25;
 emMatrix = [0.5 0.5; 0.5-bias 0.5+bias];
 
 function P_em(state, coin)
-    return emMatrix[state,coin]
+    return emMatrix[state2ind(state,states),coin]
 end
-
-states = [1.0; 2.0]; #fair, unfair
-coins = [1.0; 2.0]; #head, tail
 
 h = jHMM.HMM()
 h = set_states(h,(:state,states))
