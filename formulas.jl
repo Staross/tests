@@ -19,13 +19,13 @@ module jHMM
 
     type HMM
         v::Array{Symbol,1} #symbols of states variables
-        X::Array{Array{Any,1},1} #discrete values of states variables
+        X::Array{Any,1} #discrete values of states variables
         ndim::Integer #dimension of state space
         trFormula::Formula
         trMatrices::Array{Any,1}
         trDimensions::Array{Any,1}
         vO::Array{Symbol,1} #symbols of observation variables
-        O::Array{Array{Float64,1},1} #discrete values of observation variables
+        O::Array{Any,1} #discrete values of observation variables
         ndimO::Integer
         emFormula::Formula
         emMatrices::Array{Any,1}
@@ -134,11 +134,12 @@ function pack_variables(x...)
 end
 
 function pack_tuples(t::Type,x...)
-    X = Array(Array{t,1},length(x))
+
+    X = Array(Any,0);    
     v = Array(Symbol,length(x))
     for i=1:length(x)
        v[i] = x[i][1];
-       X[i] = x[i][2];
+       push!(X,x[i][2])
     end
     return v,X
 end
@@ -480,8 +481,13 @@ end
 function set_observations(h::jHMM.HMM,x...)
 
     #TODO: reorder and check if dimensions match, discretize if needed
-    vd, d = pack_tuples(Float64,x...)
-
+    vd, d = pack_tuples(Any,x...)
+    
+    for i=1:length(d)
+        indv = find( h.vO .== vd[i] )[1]
+        d[i] = obs2ind(d[i],h.O[indv])
+    end
+    
     h.observations = d
 
     return h
@@ -1123,15 +1129,20 @@ function max_posterior(h::jHMM.HMM)
     return s
 end
 
-function map_data(d,x)
+obs2ind{T<:Union(Float64,String)}(d::Array{T,1},ospace::Array{T,1}) = [obs2ind(d[i],ospace) for i=1:length(d)]
+obs2ind{T<:Number}(d::T,ospace::Array{T,1}) = float(indmin( abs( d - ospace ) ))
 
-    ind = zeros(size(d))
-    for i=1:length(d)
-        ind[i] = indmin( abs( d[i] - x ) )
+function obs2ind{T<:String}(d::T,ospace::Array{T,1}) 
+
+    for i=1:length(ospace)
+        if ospace[i] == d
+            return float(i)
+        end
     end
-    return ind
-
+    error("data point was not found in observation space")
 end
+
+ind2obs{T<:Any}(ind::Array{Float64,1},ospace::Array{T,1}) = ospace[ind]
 
 function state2ind{T}(state::T,states::Array{T,1})
     
@@ -1144,8 +1155,7 @@ function state2ind{T}(state::T,states::Array{T,1})
     error("state was not found.")
 end
 
-
-
+state2ind{T}(v::Array{T,1},states::Array{T,1}) = [state2ind(v[i],states) for i=1:length(v)]
 
 x = linspace(-2,2,60);
 y = linspace(-2,2,40);
@@ -1178,7 +1188,7 @@ Nt = 2;
 
 d1 = ceil( length(o1)*rand(Nt) ); d2 = ceil( length(o2)*rand(Nt) )
 
-h = set_observations(h,(:o1,int(d1)))
+h = set_observations(h,(:o1, d1))
 
 show(h)
 

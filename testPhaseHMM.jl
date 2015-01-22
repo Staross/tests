@@ -46,14 +46,14 @@ h = set_transitions(h, tr )
 h = set_observation_space(h,(:d,d))
 h = set_emission(h, em )
 
-Nt = 15;
+Nt = 150;
 
 t = linspace(0,dt*Nt,Nt)
 
 realPhase = 2*pi*t/24 + 0.1*cos(2*pi/15*t)
 realA = linspace(1.0,0.2,Nt)
 d1 =  realA.*waveth( realPhase ) + 0.01*randn(size(t));
-d1 = map_data(d1,d)
+d1 = obs2ind(d1,d)
 
 h = set_observations(h,(:d,d1))
 
@@ -83,8 +83,8 @@ println(R)
 ## coing toss example
 if true
     
-states = ["fair"; "unfair"]; #fair, unfair
-coins = [1.0; 2.0]; #head, tail
+states = ["fair"; "unfair"]; 
+coins = ["head", "tail"]; 
 
 p = 1/30;
 trMatrix = [1-p p; p 1-p];
@@ -93,11 +93,11 @@ function P_tr(state,statep)
     return trMatrix[state2ind(state,states),state2ind(statep,states)]
 end
 
-bias = 0.25;
+bias = 0.4;
 emMatrix = [0.5 0.5; 0.5-bias 0.5+bias];
 
 function P_em(state, coin)
-    return emMatrix[state2ind(state,states),coin]
+    return emMatrix[state2ind(state,states),obs2ind(coin,coins)]
 end
 
 h = jHMM.HMM()
@@ -107,11 +107,15 @@ h = set_transitions(h, f(state,statep) ~ P_tr(state,statep)  )
 h = set_observation_space(h,(:coin,coins))
 h = set_emission(h, f(state,coin) ~ P_em(state,coin) )
 
-data = (rand(30) .< 0.5 ) + 1.0;
-data = [data; (rand(30) .< 0.5+bias ) + 1.0];
-data = [data; (rand(30) .< 0.5 ) + 1.0];
+#flipping coins
+cflip = (rand(30) .< 0.5 ) ;
+cflip = [cflip; (rand(30) .< 0.5+bias ) ];
+cflip = [cflip; (rand(30) .< 0.5 ) ];
 
-h = set_observations(h,(:coin,data))
+obs = fill("head",length(cflip));
+obs[cflip] = "tail";
+
+h = set_observations(h,(:coin,obs))
 
 exf = build_forward(h)
 exb = build_backward(h)
@@ -123,6 +127,8 @@ exjoint = build_joint_of_hidden_states(h)
 posterior(h)
 
 s = max_posterior(h)
+
+scatterplot(state2ind(s[1],states))
 
 end
 
