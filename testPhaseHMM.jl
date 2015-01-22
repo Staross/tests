@@ -46,14 +46,13 @@ h = set_transitions(h, tr )
 h = set_observation_space(h,(:d,d))
 h = set_emission(h, em )
 
-Nt = 150;
+Nt = 15;
 
 t = linspace(0,dt*Nt,Nt)
 
 realPhase = 2*pi*t/24 + 0.1*cos(2*pi/15*t)
 realA = linspace(1.0,0.2,Nt)
 d1 =  realA.*waveth( realPhase ) + 0.01*randn(size(t));
-d1 = obs2ind(d1,d)
 
 h = set_observations(h,(:d,d1))
 
@@ -81,7 +80,7 @@ R = abs( mean( exp(im*(th_-realPhase))))
 println(R)
 
 ## coing toss example
-if true
+if false
     
 states = ["fair"; "unfair"]; 
 coins = ["head", "tail"]; 

@@ -253,6 +253,7 @@ function is_prime(s::Symbol)
     return s[end] == 'p'
 end
 
+
 #compute dependence matrix
 function get_dependence_matrices(m::jHMM.Model)
 
@@ -671,24 +672,7 @@ function get_main_loop_forward(h::jHMM.HMM,fs,N)
     end
 
     #loops over state variables
-    for i=1:length(h.v)
-
-        itervar = h.v[i]
-        if i == 1
-            mainloop = quote
-                @simd for $itervar=1:$(N[i])
-                   $mainloop
-                end
-            end
-        else
-            mainloop = quote
-                for $itervar=1:$(N[i])
-                   $mainloop
-                end
-            end
-        end
-
-        end
+    mainloop = loop_over(h.v,N,mainloop,simd=true)
 
     mainloop = Expr(:block, :($tmp_ex = 0.0), mainloop)
 
@@ -699,10 +683,7 @@ function get_alpha_initialization(h::jHMM.HMM,name::Symbol)
 
     N = [length(h.X[i]) for i=1:length(h.X)]
 
-    ref = Array(Symbol,1+length(N)); ref[1] = :t
-    ref[2:end] = :(:)
-
-    alpha_t = Expr(:ref, name, ref... )   #alpha(t,:,:)
+    alpha_t = Expr(:ref, name, :t, fill(:(:),length(N))... )   #alpha(t,:,:)
     ex_a = quote
         scale[t] = sum($alpha_t)
         $alpha_t = $alpha_t /  scale[t]
@@ -754,10 +735,8 @@ function build_forward(h::jHMM.HMM)
     ex = get_main_loop_forward_opt(h,fs,N)
 
     #build part with emission: alpha[tp1,xp,yp] = tmp_2 * em_1[xp,o1[tp1]]
-    ref = add_prime(h.v)
-    ref = [:(tp1); ref]
 
-    lhs = Expr(:ref,:alpha,ref...)
+    lhs = Expr(:ref,:alpha,:tp1,add_prime(h.v)...)
 
     #emission term
     em = inlineanonymous(:(tmp),length(N))
@@ -779,7 +758,7 @@ function build_forward(h::jHMM.HMM)
         @inbounds $lhs = $em
     end
 
-    ex = loop_over_prime(h.v,N,ex)
+    ex = loop_over(add_prime(h.v),N,ex)
 
     exs, alpha_t = get_alpha_initialization(h,:alpha)
     push!(exs,ex)
@@ -855,45 +834,36 @@ function get_main_loop_backward(h::jHMM.HMM,fs,fse,N)
         @inbounds $tmp_ex += $lhs
     end
 
-    #loops over state variables
-    for i=1:length(h.v)
-
-        itervar = h.v[i]
-        if i == 1
-            mainloop = quote
-                @simd for $itervar=1:$(N[i])
-                   $mainloop
-                end
-            end
-        else
-            mainloop = quote
-                for $itervar=1:$(N[i])
-                   $mainloop
-                end
-            end
-        end
-    end
+    mainloop = loop_over(h.v,N,mainloop,simd=true)
     
     mainloop = Expr(:block, :($tmp_ex = 0.0), mainloop)
     
     return mainloop
 end
     
-function loop_over_prime(v,N,ex::Expr)
-
-    #loops over state variables prime
+function loop_over(v::Array{Symbol,1},ranges,ex::Expr;simd::Bool=false)
+    
     for i=1:length(v)
 
-        itervar = add_prime(h.v[i])
-        ex = quote
-            for $itervar=1:$(N[i])
-               $ex
+        itervar = v[i]
+        
+        if i == 1 && simd     
+            ex = quote
+                @simd for $itervar=1:$(ranges[i])
+                   $ex
+                end
+            end
+        else
+            ex = quote
+                for $itervar=1:$(ranges[i])
+                   $ex
+                end
             end
         end
     end
     return ex
 end
-
+        
 function build_joint_of_hidden_states(h::jHMM.HMM)
 
     vs,fs = get_model(h.trFormula)
@@ -951,17 +921,15 @@ function build_joint_of_hidden_states(h::jHMM.HMM)
         end
     end
         
-    mainloop = loop_over_prime(h.v,N,mainloop)
+    mainloop = loop_over(add_prime(h.v),N,mainloop)
                 
     xi_dec = Expr(:call,:zeros,Expr(:tuple, [N N]...))
         
     matricesDef, a_dec, scale_dec = get_variable_declaration(h)
         
-    ref = Array(Symbol,1+length(N)); ref[1] = :(t); ref[2:end] = :(:)        
-    alpha_t = Expr(:ref,:(h.forward), ref... )   #beta(t,:,:)
-        
-    ref[1] = :(tp1);
-    beta_t = Expr(:ref,:(h.backward), ref... )   #beta(t,:,:)    
+    colons = fill(:(:),length(N)) 
+    alpha_t = Expr(:ref,:(h.forward),:t, colons... )   #alpha(t,:,:)        
+    beta_t = Expr(:ref,:(h.backward),:tp1, colons... )   #beta(tp1,:,:)    
         
 
     #finish
@@ -1001,10 +969,7 @@ function build_backward(h::jHMM.HMM)
     ex = get_main_loop_backward_opt(h,fs,fse,N)
 
     #build part : beta[t,xp,yp] = tmp
-    ref = add_prime(h.v)
-    ref = [:t; ref]
-
-    rhs = Expr(:ref,:beta,ref...)
+    rhs = Expr(:ref,:beta,:t,add_prime(h.v)...)
     
     tmp_ex = inlineanonymous(:tmp,length(N))
     ex = quote
@@ -1012,12 +977,9 @@ function build_backward(h::jHMM.HMM)
         @inbounds $rhs = $tmp_ex
     end
 
-    ex = loop_over_prime(h.v,N,ex)
+    ex = loop_over(add_prime(h.v),N,ex)
 
-    ref = Array(Symbol,1+length(N)); ref[1] = :(tp1)
-    ref[2:end] = :(:)
-
-    beta_t = Expr(:ref,:beta, ref... )   #beta(t+1,:,:)
+    beta_t = Expr(:ref,:beta, :tp1,fill(:(:),length(N))... )   #beta(t+1,:,:)
     ex_a = quote
         tp1 = t+1
         scale[tp1] = sum($beta_t)
@@ -1076,8 +1038,7 @@ function build_baum_welch_emission(h::jHMM.HMM)
                 args[j] = x_or_O ? f[j] : Expr(:ref,f[j],:tp1)
            end
 
-        
-        
+                
     end
 
 
