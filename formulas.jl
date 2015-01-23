@@ -661,9 +661,9 @@ function get_main_loop_forward(h::jHMM.HMM,fs,N)
     lhs = Expr(:ref,:alpha_t,h.v...)
 
     for i=1:length(h.trMatrices)
-           M = inlineanonymous(:tr,i)
-           ex = Expr(:ref,M,fs[i][2:end]...)
-           lhs = Expr(:call,:*,lhs,ex)
+        M = inlineanonymous(:tr,i)
+        ex = Expr(:ref,M,fs[i][2:end]...)
+        lhs = Expr(:call,:*,lhs,ex)
     end
 
     tmp_ex = inlineanonymous(:tmp,length(N))
@@ -792,7 +792,6 @@ function build_forward(h::jHMM.HMM)
     #show(ex)
     eval(ex)
     return ex
-
 end
 
 function get_main_loop_backward(h::jHMM.HMM,fs,fse,N)
@@ -956,7 +955,6 @@ function build_joint_of_hidden_states(h::jHMM.HMM)
         
     eval(ex)
     return ex
-
 end
 
 function build_backward(h::jHMM.HMM)
@@ -1021,7 +1019,6 @@ function build_backward(h::jHMM.HMM)
     #show(ex)
     eval(ex)
     return ex
-
 end
 
 function build_baum_welch_emission(h::jHMM.HMM)
@@ -1068,23 +1065,19 @@ function max_posterior(h::jHMM.HMM)
 
     p = h.posterior
     Nt = size(p,1)
-    s = Array(Any,0);
     
+    s = Array(Any,0);    
     for i=1:h.ndim
         push!(s, fill(h.X[i][1], Nt) )
-    end
-        
-    #s = zeros(Nt,length(h.X))
-
+    end        
+    
     for t=1:Nt
-
         tmp = p[t,:]
         idx = ind2sub(size(p)[2:end], indmax(tmp))
 
         for i=1:length(idx)
            s[i][t] = h.X[i][idx[i]]
         end
-
     end
 
     return s
@@ -1112,12 +1105,13 @@ function state2ind{T}(state::T,states::Array{T,1})
             return i
         end
     end
-
     error("state was not found.")
 end
 
 state2ind{T}(v::Array{T,1},states::Array{T,1}) = [state2ind(v[i],states) for i=1:length(v)]
 
+    
+# some tests    
 x = linspace(-2,2,60);
 y = linspace(-2,2,40);
 z = linspace(-2,2,20);
@@ -1150,29 +1144,12 @@ Nt = 2;
 d1 = ceil( length(o1)*rand(Nt) ); d2 = ceil( length(o2)*rand(Nt) )
 
 h = set_observations(h,(:o1, d1))
-
-show(h)
-
 m = jHMM.Model( tr )
 
 exf = build_forward(h)
 exb = build_backward(h)
 exjoint = build_joint_of_hidden_states(h)
 
-#@time alpha, L = forward(h)
-
-
-#v,fs = get_model( f(x,y,z) ~ f1(x)f2(y)f3(z) )
-#v,fs = get_model( f(x,y,z) ~ f1(x,y,z) )
-
-#v =  m.v
-#N = int( [length(eval(v[i])) for i=1:length(v)] )
-#ndim = length(N);
-
-#F = eval( Expr(:call,:zeros,Expr(:tuple, N...)) )
-
-
-#dep,v_order = get_dependence_matrices(m)
 
 
 
