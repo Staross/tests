@@ -1,67 +1,188 @@
-  function myForward(h::jHMM.HMM) # /Users/bieler/Desktop/julia/tests/formulas.jl, line 773:
-        Nt = length(h.observations[1])::Int64 # line 774:
-        alpha = ones((50,40,40,Nt))::Array{Float64,4} # line 775:
-        scale = ones(Nt) # line 776:
-        begin 
-            tr_1 = h.trMatrices[1]::Array{Float64,2}
-            tr_2 = h.trMatrices[2]::Array{Float64,2}
-            tr_3 = h.trMatrices[3]::Array{Float64,2}
-            em_1 = h.emMatrices[1]::Array{Float64,4}
-            obs = h.observations[1]::Array{Float64,1}
-        end # line 777:
-        for t = 1:Nt - 1 # line 779:
-            begin 
-                begin  # /Users/bieler/Desktop/julia/tests/formulas.jl, line 688:
-                    scale[t] = sum(alpha[:,:,:,t]) # line 689:
-                    alpha[:,:,:,t] = alpha[:,:,:,t] / scale[t] # line 690:
-                    alpha_t = squeeze(alpha[:,:,:,t],4)::Array{Float64,3} # line 691:
-                    tp1 = t + 1
-                end
-                begin  # /Users/bieler/Desktop/julia/tests/formulas.jl, line 857:
-                    for Bp = 1:40 # line 858:
-                        begin  # /Users/bieler/Desktop/julia/tests/formulas.jl, line 857:
-                            for Ap = 1:40 # line 858:
-                                begin  # /Users/bieler/Desktop/julia/tests/formulas.jl, line 857:
-                                
-                                    tmp_1 = zero(Float64)
-                                    tmp_2 = zero(Float64)
-                                    tmp_3 = zero(Float64)
-                                    tmp_4 = zero(Float64)
-                                
-                                    for thp = 1:50 # line 858:
-                                        tmp_3 = 0.0 # line 557:
-                                        tmp_4 = rand() # line 557:
-                                                                                                                                
-                                        for B = 1:40 # line 558:
+    
+A = rand(50,40,30);
+B = rand(50,50);
+C = rand(40,40);
+D = rand(30,30);
+E = rand(50,40,30);
+alpha = zeros(size(A))
 
-                                            tmp_2 = 0.0 # line 557:
-                                            for A = 1:40 # line 558:
+writecsv("A.csv",A)
+writecsv("B.csv",B)
+writecsv("C.csv",C)
+writecsv("D.csv",D)
+writecsv("E.csv",E)
 
-                                                tmp_1 = 0.0 # line 550:
-                                                @simd for th = 1:50 # line 551:
+    
+function testSum!(A::Array{Float64,3},B::Array{Float64,2},C::Array{Float64,2},
+                  D::Array{Float64,2},E::Array{Float64,3},alpha::Array{Float64,3})
+    
+    tmp_1 = zero(Float64)
+    tmp_2 = zero(Float64)
+    tmp_3 = zero(Float64)
+        
+    @inbounds begin
+    for x_3p = 1:30
+        for x_2p = 1:40
+            for x_1p = 1:50
 
-                                                    @inbounds tmp_1 += alpha_t[th,A,B] * tr_1[th,thp]                                                        
-                                                end
+                tmp_3 = zero(tmp_3)             
+                for x_3 = 1:30 
 
-                                                @inbounds tmp_2 += tmp_1 * tr_2[A,Ap]
-                                            end
-                                            
-                                            @inbounds tmp_3 += tmp_2 * tr_3[B,Bp]
-                                        end
+                    tmp_2 = zero(tmp_2) 
+                    for x_2 = 1:40 
 
-                                        @inbounds alpha[thp,Ap,Bp,tp1] =  em_1[thp,Ap,Bp,obs[tp1]] * tmp_3                    
-                                    end
-                                end
-                            end
+                        tmp_1 = zero(tmp_1) 
+                        @simd for x_1 = 1:50 
+                             tmp_1 += A[x_1,x_2,x_3] * B[x_1,x_1p]                                                        
                         end
+                        tmp_2 += tmp_1 * C[x_2,x_2p]
                     end
+                    tmp_3 += tmp_2 * D[x_3,x_3p]
                 end
+
+                alpha[x_1p,x_2p,x_3p] =  E[x_1p,x_2p,x_3p] * tmp_3
             end
-        end # line 782:
-        t = Nt # line 783:
-        scale[t] = sum(alpha[:,:,:,t]) # line 784:
-        alpha[:,:,:,t] = alpha[:,:,:,t] / scale[t] # line 785:
-        L = sum(log(scale)) # line 786:
-        h.forward = alpha # line 788:
-        return (alpha,L,scale)
+        end
     end
+    end
+
+end
+
+function testSum2!(A::Array{Float64,3},B::Array{Float64,2},C::Array{Float64,2},
+                  D::Array{Float64,2},E::Array{Float64,3},alpha::Array{Float64,3})
+    
+    tmp_1 = 0.0
+        
+    @inbounds begin
+    for x_3p = 1:30*30*40*40
+        for x_2p = 1:50*50
+
+            tmp_1 += 1.0                                                       
+
+        end
+    end
+    end
+
+end
+
+if false
+Nt = 2000;
+A = ones(50,40,40);
+B = ones(50,Nt)/2;
+C = ones(40,Nt)/3;
+D = ones(40,Nt)/4;
+E = ones(Nt,Nt)/5; 
+idx = int([Nt:-1:1]);
+end
+
+#
+
+
+function naive_times(A::Array{Float64,2},B::Array{Float64,2})
+
+    C = zeros(size(A,1),size(B,2))
+    @assert size(A,2) == size(B,1)
+    
+    @inbounds for i=1:size(C,1)
+        for j=1:size(C,2)
+            
+            s = 0.0
+            @simd for k=1:size(A,2)
+                s += A[i,k]*B[k,j]
+            end
+            C[i,j] = s
+        end
+    end
+    return C
+end
+
+A = rand(1,1500); B = rand(1500,2000); C = rand(2000,1);
+ 
+function testSum3(A::Array{Float64,2},B::Array{Float64,2},C::Array{Float64,2})
+ 
+    s = 0.0
+            
+    tmp_j = 0.0
+    @inbounds for j=1:size(B,2)
+        tmp_i = 0.0
+        @simd for i=1:size(B,1)
+            tmp_i += B[i,j] * A[i]            
+        end
+        tmp_j += tmp_i * C[j]
+    end
+
+    s = tmp_j
+
+    return s
+end
+
+
+function testSum3v(A::Array{Float64,2},B::Array{Float64,2},C::Array{Float64,2})
+
+    return  A*B*C
+end
+
+function testSum3v_naive(A::Array{Float64,2},B::Array{Float64,2},C::Array{Float64,2})
+
+    return  naive_times(naive_times(A,B),C)
+end
+
+@assert mean(abs( testSum3(A,B,C) - testSum3v(A,B,C) ) ) < 1e-8
+
+@time testSum3(A,B,C);
+@time testSum3v(A,B,C);
+
+#
+
+A = rand(100,1500); B = rand(1500,2000); C = rand(2000,1);
+At = A';
+ 
+function testSum4(A::Array{Float64,2},B::Array{Float64,2},C::Array{Float64,2})
+ 
+    s = zeros(size(A,2))
+    
+    @inbounds for k=1:size(A,2)
+    
+        tmp_j = 0.0
+        for j=1:size(B,2)
+            tmp_i = 0.0        
+            @simd for i=1:size(B,1)
+                tmp_i += B[i,j] * A[i,k]
+            end
+            tmp_j += tmp_i * C[j]
+        end
+        s[k] = tmp_j 
+    
+    end
+    return s
+end
+
+@assert mean(abs( testSum4(At,B,C) - testSum3v(A,B,C) ) ) < 1e-8
+
+@time testSum4(At,B,C);
+@time testSum3v(A,B,C);
+
+t1=[];
+t2=[];
+
+B = rand(800,600); C = rand(600,1);
+for N = [1:20:500]
+    println(N)
+    A = rand(N,800); 
+    At = A';
+
+    tt = Base.time();
+    testSum4(At,B,C);
+    tt2 = Base.time();
+    t1 = [t1; tt2-tt];
+
+    tt = Base.time();
+    testSum3v_naive(A,B,C);
+    tt2 = Base.time();
+    t2 = [t2; tt2-tt];
+
+end
+
+N = [1:20:500]
+
+
