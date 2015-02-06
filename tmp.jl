@@ -1,4 +1,5 @@
     
+if false
 A = rand(50,40,30);
 B = rand(50,50);
 C = rand(40,40);
@@ -44,8 +45,29 @@ function testSum!(A::Array{Float64,3},B::Array{Float64,2},C::Array{Float64,2},
             end
         end
     end
+end
+
+end
+
+@time testSum!(A,B,C,D,E,alpha);
+
+if true 
+    
+    for N = [1 10 50 100]
+        println(N)
+
+        A = rand(N,40,30);
+        B = rand(N,N);
+
+        tt = Base.time();
+        testSum!(A,B,C,D,E,alpha);
+        tt2 = Base.time();
+        t1 = [t1; tt2-tt];
+
+
     end
 
+    
 end
 
 function testSum2!(A::Array{Float64,3},B::Array{Float64,2},C::Array{Float64,2},
@@ -76,7 +98,6 @@ idx = int([Nt:-1:1]);
 end
 
 #
-
 
 function naive_times(A::Array{Float64,2},B::Array{Float64,2})
 
@@ -162,27 +183,101 @@ end
 @time testSum4(At,B,C);
 @time testSum3v(A,B,C);
 
-t1=[];
-t2=[];
+if false 
+    t1=[];
+    t2=[];
 
-B = rand(800,600); C = rand(600,1);
-for N = [1:20:500]
-    println(N)
-    A = rand(N,800); 
-    At = A';
+    B = rand(800,600); C = rand(600,1);
+    for N = [1:20:500]
+        println(N)
+        A = rand(N,800); 
+        At = A';
 
-    tt = Base.time();
-    testSum4(At,B,C);
-    tt2 = Base.time();
-    t1 = [t1; tt2-tt];
+        tt = Base.time();
+        testSum4(At,B,C);
+        tt2 = Base.time();
+        t1 = [t1; tt2-tt];
 
-    tt = Base.time();
-    testSum3v_naive(A,B,C);
-    tt2 = Base.time();
-    t2 = [t2; tt2-tt];
+        tt = Base.time();
+        testSum3v_naive(A,B,C);
+        tt2 = Base.time();
+        t2 = [t2; tt2-tt];
+
+    end
+
+    N = [1:20:500]
+
+
+# test multiprod
+A = rand(10,50);
+B = rand(50,30,1000,10);
+C = zeros(10,30,1000,10);
+
+function multiprod!(A,B,C)
+
+    @inbounds for i = 1:1000 
+        for j = 1:10 
+            C[:,:,i,j] = A * B[:,:,i,j]; 
+        end 
+    end
+end
 
 end
 
-N = [1:20:500]
+points = randn(2, 5000);
+
+myDist(x::Array{Float64,1}) = return sum(x)
+
+
+function slow(points::Array{Float64,2})
+
+    n_dim = size(points,1)
+    n_points::Int = size(points,2)
+    point_2 = zeros(n_dim)
+    cum = 0.0
+    for i in 1:n_points
+        for j in (i+1):n_points
+            for k=1:n_dim
+                point_2[k] = points[k, j]
+            end
+            point_2[k] = points[k, j]
+            cum += myDist(point_2)
+        end
+    end
+    return cum
+end
+
+
+end
+
+
+function multiprod{N,K,T}(A::Array{T,N},B::Array{T,K},dimsA::Array{Int64,1}, dimsB::Array{Int64,1})
+
+    sA = size(A)
+    sB = size(B)
+
+    f(x) = x
+    sC = ntuple(N+K-2,f)    
+    for i=1:N-1
+        sC[i] = sA[i]
+    end    
+    for i=1:K-1
+        sC[i+N-1] = sB[i]
+    end
+    
+    println(sC)
+    C = zeros(Float64,sC)
+    return C
+end
+
+A = rand(10,10); B = rand(20,20);
+multiprod(A,B,[1; 2],[1; 2])
+
+sA = size(A)
+sB = size(B)
+
+C = zeros( [sA; sB] )
+
+
 
 
