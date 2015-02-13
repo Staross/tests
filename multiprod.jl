@@ -145,7 +145,7 @@ end
 
 function build_loop_mult_functions()
 
-   N = 3
+   for N = 1:4
 
    args = Array(Any,0)
    for i=1:N
@@ -154,7 +154,7 @@ function build_loop_mult_functions()
            push!(args, inlineanonymous(:i,j+(i-1)*3) )       
        end
    end   
-   args = Expr(args...)
+   #args = Expr(args...)
    #args = Expr(:tuple,:A,:B,:C,args...)
    #fundef = Expr(:call, :(loop_mult!), args)
 
@@ -202,11 +202,14 @@ function build_loop_mult_functions()
    show(fun)
    eval(fun)
    
+   end
+   
       
 end
 
 build_loop_mult_functions()
 
+if false
 function loop_mult!(A,B,C,N1,i1,i2,i3) #3D
 
     for k1=1:N1
@@ -250,6 +253,7 @@ function loop_mult!(A,B,C,N1,i1,i2,i3,N2,i4,i5,i6,N3,i7,i8,i9)
             end        
         end
     end
+end
 end
 
 #just for testing
