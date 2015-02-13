@@ -148,6 +148,7 @@ function build_loop_mult_functions()
    for N = 1:4
 
    args = Array(Any,0)
+   push!(args,:A,:B,:C)
    for i=1:N
        push!(args, inlineanonymous(:N,i) )
        for j=1:3
@@ -237,6 +238,7 @@ function loop_mult!(A,B,C,N1,i1,i2,i3,N2,i4,i5,i6)
         end
     end
 end
+
 
 function loop_mult!(A,B,C,N1,i1,i2,i3,N2,i4,i5,i6,N3,i7,i8,i9)
 
