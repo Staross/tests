@@ -251,33 +251,4 @@ end
 end
 
 
-function multiprod{N,K,T}(A::Array{T,N},B::Array{T,K},dimsA::Array{Int64,1}, dimsB::Array{Int64,1})
-
-    sA = size(A)
-    sB = size(B)
-
-    f(x) = x
-    sC = ntuple(N+K-2,f)    
-    for i=1:N-1
-        sC[i] = sA[i]
-    end    
-    for i=1:K-1
-        sC[i+N-1] = sB[i]
-    end
-    
-    println(sC)
-    C = zeros(Float64,sC)
-    return C
-end
-
-A = rand(10,10); B = rand(20,20);
-multiprod(A,B,[1; 2],[1; 2])
-
-sA = size(A)
-sB = size(B)
-
-C = zeros( [sA; sB] )
-
-
-
 
