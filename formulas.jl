@@ -204,7 +204,7 @@ function set_transitions(h::jHMM.HMM,f::Formula)
     h.trMatrices = trMatrices
     h.trDimensions = trDimensions
 
-    #call the function
+    #call the functions
     for i=1:length(trModel.f)
         fname = symbol( string("fill_transition_matrix_",i) )
         eval(Expr(:call, fname,:h))

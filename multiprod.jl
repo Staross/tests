@@ -61,7 +61,7 @@ function get_output_size2(sA::Dims,sB::Dims,dimsA::Array{Int64,1}, dimsB::Array{
     end
     
     return sC
-    end
+end
 
 
 function get_output_size(sA::Dims,sB::Dims,dimsA::Array{Int64,1}, dimsB::Array{Int64,1})
@@ -362,6 +362,43 @@ function multiprod1{N,K,P,T}(A::Array{T,N},B::Array{T,K},C::Array{T,P})
     return C
 end
 
+function multitime!{N,K,P,T}(A::Array{T,N},B::Array{T,K},C::Array{T,P})
+    
+    D = similar(C)
+    for i=1:size(B,3)
+        for j=1:size(B,4)
+            broadcast!(*, D, slice(A,:,:), slice(B,:,:,i,j) )
+            C[i,j] = sum(D)
+        end
+    end
+    
+end
+
+
+function multitime_devec!{N,K,P,T}(A::Array{T,N},B::Array{T,K},C::Array{T,P})
+        
+    C = zero(C)
+
+    @inbounds for i=1:size(B,3)
+        for j=1:size(B,4)            
+            for k1=1:size(C,1)
+                @simd for k2=1:size(C,2)
+                    C[i,j] += B[k1,k2,i,j]*A[i,j]
+                end
+            end
+        end
+    end    
+end
+
+function time_sum!{N,K,P,T}(A::Array{T,N},B::Array{T,K},C::Array{T,P},d1)
+
+    
+    
+
+end
+
+
+
 A = rand(30,40); B = rand(40,30);
 @assert multiprod(A,B,[1; 2],[1; 2]) == A*B
 
@@ -377,6 +414,11 @@ C =  multiprod(A,B,[1; 2],[1; 2])
 @time multiprod(A,B,[1; 2],[1; 2])
 
 
+A = rand(30,40,60); B = rand(60,30);
+C =  multiprod(A,B,[2; 3],[1; 2]);
+@time multiprod!(A,B,C,[2; 3],[1; 2]);
+
+
 C = zeros(300,20,60,3);
 A = rand(300,400,60,3); B = rand(400,20,60,3);
 
@@ -388,7 +430,6 @@ multiprod2(A,B,C)
 gc()
 @time multiprod!(A,B,C,[1; 2],[1; 2]) 
 @time multiprod2(A,B,C)
-
 
 
 A = rand(30,10,6,3,4); B = rand(10,20,6,3,4);
@@ -407,5 +448,18 @@ multiprod(A,B,[1; 3],[1; 2])
 
 A = rand(6,30,10,3,4); B = rand(10,20,30,3,4);
 multiprod(A,B,[1; 3],[1; 2]) 
+
+A = rand(30,50); B = rand(30,50,30,50); C = zeros(30,50);
+multitime!(A,B,C);
+multitime_devec!(A,B,C);
+@time multitime!(A,B,C);
+@time multitime_devec!(A,B,C);
+
+##
+
+A = zeros(1000,1000)
+
+
+
 
 
